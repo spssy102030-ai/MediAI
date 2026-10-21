@@ -1,94 +1,93 @@
 
 import streamlit as st
 from google import genai
-from google.genai import types
 
-# =========================================================
-# MediAI 3.0 | Created by Yash Raj Singh
-# Educational health information, not medical diagnosis.
-# =========================================================
+# --------------------------------------------------
+# MediAI 2.0 — Created by Yash Raj Singh
+# --------------------------------------------------
 
 st.set_page_config(
-    page_title="MediAI | Health Intelligence",
+    page_title="MediAI | Health Assistant",
     page_icon="🩺",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-MODEL = "gemini-3.8-flash"
-MAX_QUESTION_LENGTH = 3000
+MODEL = "gemini-2.5-flash"
 
 SYSTEM_PROMPT = """
-You are MediAI 3.0, a careful, friendly educational
-health-information assistant created by Yash Raj Singh.
+You are MediAI, an educational health-information assistant.
 
-PURPOSE
-Explain a broad range of diseases, health conditions,
-symptoms, sports injuries, prevention, nutrition,
-medical terminology and basic first aid.
+YOUR PURPOSE
+Explain health conditions, diseases, symptoms, injuries,
+prevention, nutrition, general first aid and medical terms
+in simple, friendly English.
 
-ANSWER FORMAT
-When relevant, explain:
-1. What the condition is
+FOR HEALTH CONDITIONS, ORGANIZE ANSWERS AS APPROPRIATE:
+1. What it is
 2. Common causes and risk factors
 3. Common symptoms
-4. Warning signs
-5. General food and hydration guidance
-6. Safe self-care or first aid
-7. What to avoid
+4. Important warning signs
+5. Food, hydration and nutrition guidance
+6. What to do and what to avoid
+7. Prevention
 8. When to seek medical care
-9. Prevention
-10. Trustworthy references for further reading
+9. Trustworthy references for further reading
 
 ACCURACY
-- Never pretend to diagnose a person.
+- Be honest about uncertainty and limitations.
+- Never invent facts, statistics, citations or cures.
 - Similar symptoms can have different causes.
-- Never invent medical facts, statistics, citations or cures.
-- Be honest about uncertainty and knowledge limitations.
-- Do not claim to have checked a live medical database
-  or website unless a real search was performed.
-- Do not claim that every disease is covered.
-- Explain technical terms in simple language.
+- Never claim to diagnose a person through chat.
+- Never claim to know every disease or medical fact.
+- Distinguish established evidence from uncertain claims.
+- Do not claim to have searched the web or a database
+  unless a search tool was actually used.
 
-NUTRITION
-- Offer balanced, practical, evidence-informed guidance.
-- Never claim that food alone cures a disease.
+FOOD AND NUTRITION
+- Give balanced, practical, evidence-informed guidance.
+- No food should be described as a guaranteed cure.
 - Do not recommend extreme diets or unnecessary restriction.
-- Mention that allergies and individual conditions matter.
-- Recommend professional dietary advice when appropriate.
+- Food advice can depend on allergies and medical conditions.
+- Recommend individualized professional advice when needed.
 
 MEDICINES
 - Do not prescribe medicines or individualized doses.
 - Do not tell users to start, stop or change medication.
-- Explain treatments only in general educational terms.
+- Explain treatments generally and recommend a qualified
+  healthcare professional for personal treatment decisions.
 
-FIRST AID
-- Prioritize emergency services over a long explanation.
-- For severe bleeding, breathing difficulty, unconsciousness,
-  poisoning or other possible emergencies, tell the user
-  to get immediate emergency assistance.
+FIRST AID AND EMERGENCIES
+- Prioritize emergency care over a long explanation.
+- For severe breathing difficulty, unconsciousness,
+  severe bleeding, suspected poisoning or other emergencies,
+  tell the user to get immediate emergency help.
 - In India, call 112 for emergency assistance where available.
 - Encourage children to get help from a trusted adult.
-- Suspected fractures, serious burns and head injuries
-  require appropriate professional assessment.
-- Never recommend dangerous home remedies.
+- For suspected fractures, serious burns and head injuries,
+  recommend prompt professional assessment.
+- Never suggest dangerous home remedies.
 
 PRIVACY
-- Do not ask for names, addresses or unnecessary personal data.
+- Do not request names, addresses or other unnecessary
+  identifying information.
 - Remind users not to share private medical information.
 
-LANGUAGE
-- Follow the user's selected language.
-- Use clear English, Hindi or natural Hinglish as requested.
-- Use headings and bullet points where helpful.
+STYLE
+- Use clear headings and bullet points.
+- Explain difficult terms in easy language.
+- Be calm, respectful and practical.
+- State when professional assessment is necessary.
 
 IMPORTANT
-MediAI provides educational information only. It is not a
-doctor, cannot reliably diagnose conditions and cannot
-replace professional medical care.
+MediAI provides educational information only.
+It is not a doctor, cannot reliably diagnose conditions,
+and cannot replace professional medical care.
 """
 
-# ----------------------- STYLING --------------------------
+# --------------------------------------------------
+# Page styling
+# --------------------------------------------------
 
 st.markdown(
     """
@@ -96,40 +95,91 @@ st.markdown(
     .block-container {
         padding-top: 1.5rem;
         padding-bottom: 2rem;
-        max-width: 1200px;
     }
-    .hero {
-        padding: 1.4rem;
-        border: 1px solid rgba(128,128,128,0.3);
-        border-radius: 18px;
-        margin-bottom: 1rem;
-    }
-    .small-note {
-        font-size: 0.88rem;
-        opacity: 0.8;
+    div[data-testid="stMetric"] {
+        border: 1px solid rgba(128,128,128,0.25);
+        padding: 14px;
+        border-radius: 12px;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# ------------------- API CONFIGURATION -------------------
+# --------------------------------------------------
+# API connection
+# --------------------------------------------------
 
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 
-@st.cache_resource
-def get_client(key):
-    return genai.Client(api_key=key)
+if api_key:
+    client = genai.Client(api_key=api_key)
+else:
+    client = None
 
-client = get_client(api_key) if api_key else None
+# --------------------------------------------------
+# AI helper
+# --------------------------------------------------
 
-# ----------------------- HELPERS -------------------------
+def ask_ai(question, history=None):
+    """Ask Gemini for educational health information."""
+    if client is None:
+        return (
+            "The AI is not connected yet. Add your "
+            "GEMINI_API_KEY to .streamlit/secrets.toml "
+            "and restart the app."
+        )
 
-LANGUAGES = {
-    "English": "English",
-    "Hindi (हिन्दी)": "Hindi",
-    "Hinglish": "natural Hinglish using Roman script",
-}
+    conversation = []
+
+    if history:
+        for message in history[-8:]:
+            role = message.get("role", "")
+            content = message.get("content", "")
+            if role in ("user", "assistant"):
+                label = "User" if role == "user" else "MediAI"
+                conversation.append(f"{label}: {content}")
+
+    conversation.append(f"User: {question}")
+
+    full_prompt = (
+        SYSTEM_PROMPT
+        + "\n\nConversation:\n"
+        + "\n\n".join(conversation)
+        + "\n\nMediAI:"
+    )
+
+    try:
+        response = client.models.generate_content(
+            model=MODEL,
+            contents=full_prompt,
+        )
+
+        answer = response.text
+
+        if not answer:
+            return (
+                "I couldn't generate an answer this time. "
+                "Please try asking in a different way."
+            )
+
+        return answer
+
+    except Exception as error:
+        # Show a helpful message without exposing API credentials.
+        print("MediAI API error:", str(error))
+        return (
+            "I couldn't connect to the AI service. "
+            "Please check your internet connection, API key, "
+            "Gemini model availability and API quota, then "
+            "try again. If it continues, check the terminal "
+            "for the technical error."
+        )
+
+
+# --------------------------------------------------
+# Emergency warning check
+# --------------------------------------------------
 
 EMERGENCY_PHRASES = [
     "can't breathe",
@@ -138,140 +188,67 @@ EMERGENCY_PHRASES = [
     "severe bleeding",
     "unconscious",
     "passed out",
-    "not breathing",
-    "severe chest pain",
     "poisoning",
     "overdose",
-    "suicidal",
-    "want to kill myself",
+    "severe chest pain",
+    "not breathing",
 ]
 
 def may_be_emergency(text):
-    lowered = text.lower()
-    return any(term in lowered for term in EMERGENCY_PHRASES)
+    text = text.lower()
+    return any(phrase in text for phrase in EMERGENCY_PHRASES)
 
 
-def ask_ai(question, history=None, language="English"):
-    if not client:
-        return (
-            "The AI service is not configured yet. Add "
-            "GEMINI_API_KEY in Streamlit Cloud Secrets "
-            "and restart the app."
-        )
+# --------------------------------------------------
+# Header
+# --------------------------------------------------
 
-    instruction = (
-        SYSTEM_PROMPT
-        + "\n\nRespond in "
-        + LANGUAGES.get(language, "English")
-        + "."
-    )
+st.title("🩺 MediAI")
+st.subheader("Your friendly AI health-information assistant")
 
-    conversation = []
+st.write(
+    "Explore health topics, learn basic first aid, "
+    "and understand general nutrition guidance."
+)
 
-    for message in (history or [])[-10:]:
-        role = message.get("role")
-        content = message.get("content", "")
-        if role in ("user", "assistant") and content:
-            conversation.append({
-                "role": "user" if role == "user" else "model",
-                "parts": [{"text": content[:MAX_QUESTION_LENGTH]}],
-            })
+st.info(
+    "Medical safety notice: MediAI provides educational "
+    "information, not a diagnosis or personal treatment plan. "
+    "For medical concerns, contact a qualified healthcare "
+    "professional. For emergencies, seek immediate help."
+)
 
-    conversation.append({
-        "role": "user",
-        "parts": [{"text": question[:MAX_QUESTION_LENGTH]}],
-    })
-
-    try:
-        response = client.models.generate_content(
-            model=MODEL,
-            contents=conversation,
-            config=types.GenerateContentConfig(
-                system_instruction=instruction,
-            ),
-        )
-
-        answer = response.text
-
-        if not answer:
-            return (
-                "I couldn't generate an answer this time. "
-                "Please try again with a clearer question."
-            )
-
-        return answer
-
-    except Exception:
-        # Never display API credentials or internal errors.
-        return (
-            "Sorry, I couldn't reach the AI service. Please "
-            "check your internet connection, API key, model "
-            "availability and API quota. If the problem "
-            "continues, check the Streamlit app logs."
-        )
-
-
-def show_emergency_notice():
-    st.error(
-        "⚠️ Possible emergency: do not wait for a chatbot. "
-        "Contact local emergency services immediately. "
-        "In India, call 112 where available. Get help from "
-        "a trusted adult if you are a child."
-    )
-
-
-def run_topic(question, language):
-    with st.spinner("MediAI is preparing your information..."):
-        result = ask_ai(question, language=language)
-    st.markdown(result)
-
-
-# ------------------- SESSION STATE -----------------------
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-if "topic_result" not in st.session_state:
-    st.session_state.topic_result = None
-
-if "pending_question" not in st.session_state:
-    st.session_state.pending_question = None
-
-# ----------------------- SIDEBAR -------------------------
+# --------------------------------------------------
+# Sidebar
+# --------------------------------------------------
 
 with st.sidebar:
     st.title("🩺 MediAI")
-    st.caption("Understand health. Make informed choices.")
-
-    language = st.selectbox(
-        "Answer language",
-        list(LANGUAGES.keys()),
-        index=0,
-    )
+    st.caption("Health knowledge, explained simply")
 
     st.divider()
 
-    st.markdown("### Your health tools")
-    st.markdown(
-        "- 💬 AI health chat\n"
-        "- 🔎 Disease explorer\n"
-        "- 🥗 Nutrition guide\n"
-        "- 🩹 First-aid guide\n"
-        "- 📚 Trusted resources"
-    )
+    st.markdown("### ✨ Features")
+    st.write("💬 AI health chat")
+    st.write("🔎 Disease and condition explorer")
+    st.write("🥗 Food and nutrition guide")
+    st.write("🩹 First-aid information")
+    st.write("📚 Trusted health references")
 
     st.divider()
 
-    st.markdown("### Trusted references")
+    st.markdown("### 📚 Trusted references")
     st.markdown(
-        "[MedlinePlus](https://medlineplus.gov/healthtopics.html)"
+        "[MedlinePlus — Health Topics]"
+        "(https://medlineplus.gov/healthtopics.html)"
     )
     st.markdown(
-        "[World Health Organization]"
+        "[WHO — Fact Sheets]"
         "(https://www.who.int/news-room/fact-sheets)"
     )
     st.markdown(
-        "[NHS Health A to Z](https://www.nhs.uk/conditions/)"
+        "[NHS — Health A to Z]"
+        "(https://www.nhs.uk/conditions/)"
     )
 
     st.divider()
@@ -282,109 +259,122 @@ with st.sidebar:
 
     st.caption("Created by Yash Raj Singh")
 
-# ------------------------ HEADER -------------------------
+# --------------------------------------------------
+# Tabs
+# --------------------------------------------------
 
-st.markdown(
-    """
-    <div class="hero">
-        <h1>🩺 MediAI 3.0</h1>
-        <p>
-            Your AI-powered educational health companion.
-            Explore conditions, understand symptoms and learn
-            general prevention and first-aid information.
-        </p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-st.warning(
-    "MediAI is not a doctor. It cannot confirm a diagnosis "
-    "or replace professional care. For emergencies, contact "
-    "emergency services instead of waiting for an AI response."
-)
-
-if not client:
-    st.error(
-        "AI connection unavailable. Check that "
-        "GEMINI_API_KEY is configured in Streamlit Secrets."
+chat_tab, disease_tab, food_tab, first_aid_tab, resources_tab = (
+    st.tabs(
+        [
+            "💬 Ask MediAI",
+            "🔎 Disease Explorer",
+            "🥗 Food Guide",
+            "🩹 First Aid",
+            "📚 Resources",
+        ]
     )
-
-# ------------------------- TABS --------------------------
-
-chat_tab, disease_tab, food_tab, aid_tab, learn_tab = st.tabs(
-    [
-        "💬 Ask MediAI",
-        "🔎 Disease Explorer",
-        "🥗 Food Guide",
-        "🩹 First Aid",
-        "📚 Learn",
-    ]
 )
 
-# =========================================================
-# 1. AI CHAT
-# =========================================================
+# --------------------------------------------------
+# TAB 1 — AI CHAT
+# --------------------------------------------------
 
 with chat_tab:
-    st.subheader("Ask your health question")
-    st.caption(
-        "Avoid sharing names, addresses, phone numbers or "
-        "other private medical information."
+    st.header("Ask MediAI")
+    st.write(
+        "Ask a general question about health, diseases, "
+        "injuries, prevention or medical terms."
     )
 
-    st.markdown("**Quick questions**")
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-    quick_questions = [
-        "Explain dengue and its warning signs",
-        "What is asthma?",
-        "How can I stay hydrated during sports?",
-        "What should I know about a sprained ankle?",
-    ]
+    if not client:
+        st.warning(
+            "AI connection missing. Check your API key "
+            "in .streamlit/secrets.toml."
+        )
 
-    cols = st.columns(2)
+    # Quick questions
+    st.markdown("**Try a question:**")
 
-    for index, question in enumerate(quick_questions):
-        with cols[index % 2]:
-            if st.button(
-                question,
-                key=f"quick_{index}",
-                use_container_width=True,
-            ):
-                st.session_state.pending_question = question
+    quick_col1, quick_col2 = st.columns(2)
 
+    with quick_col1:
+        if st.button(
+            "What is dengue?",
+            use_container_width=True,
+        ):
+            st.session_state.quick_question = (
+                "Explain dengue, its symptoms, prevention "
+                "and warning signs."
+            )
+
+        if st.button(
+            "Explain diabetes",
+            use_container_width=True,
+        ):
+            st.session_state.quick_question = (
+                "Explain diabetes in simple language, "
+                "including general food guidance."
+            )
+
+    with quick_col2:
+        if st.button(
+            "Ankle injury first aid",
+            use_container_width=True,
+        ):
+            st.session_state.quick_question = (
+                "Explain safe first aid for an ankle injury "
+                "and signs that need medical assessment."
+            )
+
+        if st.button(
+            "Healthy eating basics",
+            use_container_width=True,
+        ):
+            st.session_state.quick_question = (
+                "Explain balanced eating and hydration "
+                "for general health."
+            )
+
+    # Show previous messages
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
+    # Process a quick question or typed question
     typed_question = st.chat_input(
-        "Ask about a condition, injury or health topic...",
-        max_chars=MAX_QUESTION_LENGTH,
+        "Ask a health-information question..."
     )
 
     question = typed_question
 
-    if not question and st.session_state.pending_question:
-        question = st.session_state.pending_question
-        st.session_state.pending_question = None
+    if not question and "quick_question" in st.session_state:
+        question = st.session_state.pop("quick_question")
 
     if question:
-        if may_be_emergency(question):
-            show_emergency_notice()
-
         st.session_state.messages.append(
             {"role": "user", "content": question}
         )
+
+        if may_be_emergency(question):
+            st.error(
+                "⚠️ This may involve an emergency. Get help "
+                "from a trusted adult and contact emergency "
+                "services immediately. In India, call 112 "
+                "where available. Do not wait for a chatbot "
+                "response."
+            )
 
         with st.chat_message("user"):
             st.markdown(question)
 
         with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
+            with st.spinner("MediAI is preparing an answer..."):
                 answer = ask_ai(
                     question,
                     history=st.session_state.messages[:-1],
-                    language=language,
                 )
             st.markdown(answer)
 
@@ -392,149 +382,189 @@ with chat_tab:
             {"role": "assistant", "content": answer}
         )
 
-# =========================================================
-# 2. DISEASE EXPLORER
-# =========================================================
+# --------------------------------------------------
+# TAB 2 — DISEASE EXPLORER
+# --------------------------------------------------
 
 with disease_tab:
-    st.subheader("Explore a disease or condition")
+    st.header("🔎 Disease and Condition Explorer")
     st.write(
-        "Learn about common conditions, chronic diseases, "
-        "infectious illnesses, rare conditions and injuries."
+        "Enter a disease, health condition or injury "
+        "to learn general information."
     )
 
-    with st.form("disease_search"):
-        condition = st.text_input(
-            "Topic",
-            placeholder="Example: migraine, dengue, asthma",
-            max_chars=150,
+    with st.form("disease_form"):
+        disease_name = st.text_input(
+            "Disease, condition or injury",
+            placeholder="Example: asthma, dengue, sprained ankle",
         )
 
-        explore = st.form_submit_button(
+        disease_submit = st.form_submit_button(
             "Explore topic",
             use_container_width=True,
         )
 
-    if explore:
-        if not condition.strip():
-            st.warning("Enter a topic first.")
+    if disease_submit:
+        if not disease_name.strip():
+            st.warning("Please enter a topic first.")
         else:
-            if may_be_emergency(condition):
-                show_emergency_notice()
+            disease_question = f"""
+Explain the following health topic for educational purposes:
+{disease_name}
 
-            prompt = f"""
-Explain this health topic for general education: {condition}
+Include, when relevant:
+- What it is
+- Common causes
+- Common symptoms and warning signs
+- Prevention
+- General food and hydration guidance
+- Safe general self-care or first aid
+- What to avoid
+- When professional or emergency help is needed
+- Trusted references for further reading
 
-Include relevant sections on what it is, causes, common
-symptoms, warning signs, prevention, general self-care,
-food guidance, what to avoid and when to seek professional
-or emergency care. Never diagnose a person or prescribe
-medication. State any uncertainty honestly.
+Do not diagnose anyone or prescribe treatment.
 """
-            run_topic(prompt, language)
+            with st.spinner("Exploring the health topic..."):
+                result = ask_ai(disease_question)
 
-# =========================================================
-# 3. FOOD GUIDE
-# =========================================================
+            st.markdown("### Results")
+            st.markdown(result)
+
+            st.caption(
+                "This is AI-generated educational information, "
+                "not a confirmed diagnosis or medical record."
+            )
+
+# --------------------------------------------------
+# TAB 3 — FOOD AND NUTRITION
+# --------------------------------------------------
 
 with food_tab:
-    st.subheader("Food and nutrition guide")
+    st.header("🥗 Food and Nutrition Guide")
     st.write(
-        "Learn about balanced nutrition and general dietary "
-        "considerations for a health topic."
+        "Learn about general nutrition and food guidance "
+        "for a health condition."
     )
 
-    with st.form("nutrition_search"):
-        nutrition_topic = st.text_input(
-            "Condition or nutrition question",
-            placeholder="Example: iron-rich foods, diabetes",
-            max_chars=150,
+    with st.form("food_form"):
+        food_topic = st.text_input(
+            "Health topic or nutrition question",
+            placeholder="Example: iron deficiency, diabetes, hydration",
         )
 
-        nutrition_submit = st.form_submit_button(
-            "Get nutrition information",
+        food_submit = st.form_submit_button(
+            "Get food guidance",
             use_container_width=True,
         )
 
-    if nutrition_submit:
-        if not nutrition_topic.strip():
-            st.warning("Enter a topic first.")
+    if food_submit:
+        if not food_topic.strip():
+            st.warning("Please enter a topic first.")
         else:
-            prompt = f"""
-Provide general, evidence-informed nutrition education
-about: {nutrition_topic}
+            food_question = f"""
+Give balanced, evidence-informed general food guidance
+about this topic: {food_topic}
 
-Explain balanced food choices, hydration where relevant,
-foods to limit only when medically justified, and important
-cautions. Do not promise cures, recommend extreme diets,
-or advise stopping prescribed treatment or diets.
-Explain when individual professional advice is needed.
+Explain:
+- General foods to consider and why
+- Foods or drinks to limit only when there is a sound reason
+- Hydration guidance when relevant
+- Important allergies or dietary cautions
+- When an individualized dietitian or clinician is needed
+
+Do not promise cures, prescribe a restrictive diet,
+or suggest changing a medically prescribed diet.
+Use simple language.
 """
-            run_topic(prompt, language)
+            with st.spinner("Preparing nutrition guidance..."):
+                result = ask_ai(food_question)
 
-# =========================================================
-# 4. FIRST AID
-# =========================================================
+            st.markdown("### Nutrition information")
+            st.markdown(result)
 
-with aid_tab:
-    st.subheader("Basic first-aid information")
-
-    st.error(
-        "Serious injuries and life-threatening symptoms need "
-        "immediate professional help. Do not delay emergency "
-        "care to use this guide."
-    )
-
-    aid_topics = {
-        "Minor cuts and scrapes":
-            "Explain basic first aid for minor cuts and scrapes, "
-            "including cleaning, covering and warning signs.",
-        "Minor burns":
-            "Explain safe first aid for minor burns, what not "
-            "to apply and when professional care is needed.",
-        "Nosebleeds":
-            "Explain safe first aid for a nosebleed and when "
-            "urgent medical attention is necessary.",
-        "Sprains":
-            "Explain general first aid for a possible sprain, "
-            "what to avoid and when to get assessed.",
-        "Suspected fracture":
-            "Explain safe first aid for a suspected fracture. "
-            "Do not try to straighten the injured part. Explain "
-            "how to avoid further injury and get medical help.",
-        "Head injury":
-            "Explain warning signs after a head injury and when "
-            "urgent assessment is required. Do not diagnose.",
-        "Heat exhaustion":
-            "Explain safe first aid for possible heat exhaustion, "
-            "warning signs and when emergency care is required."
-    }
-
-    selected_aid = st.selectbox(
-        "Choose a topic",
-        list(aid_topics.keys()),
-    )
-
-    if st.button("Show first-aid guide", use_container_width=True):
-        if selected_aid == "Head injury":
-            st.warning(
-                "Serious head injuries require urgent assessment. "
-                "Call emergency services for severe symptoms."
+            st.caption(
+                "Food guidance varies by person. Food alone "
+                "does not replace medical treatment."
             )
 
-        run_topic(aid_topics[selected_aid], language)
+# --------------------------------------------------
+# TAB 4 — FIRST AID
+# --------------------------------------------------
 
-# =========================================================
-# 5. LEARN AND TRUSTED REFERENCES
-# =========================================================
+with first_aid_tab:
+    st.header("🩹 Basic First-Aid Guide")
 
-with learn_tab:
-    st.subheader("Learn from trusted health sources")
+    st.error(
+        "For a life-threatening emergency, get immediate "
+        "emergency assistance. In India, call 112 where "
+        "available. Do not delay help to use MediAI."
+    )
+
+    st.write(
+        "Choose a topic to learn about general first aid. "
+        "Serious injuries need professional assessment."
+    )
+
+    first_aid_topics = {
+        "Minor cuts and scrapes":
+            "Give basic first aid for minor cuts and scrapes, "
+            "including cleaning, covering and warning signs.",
+        "Minor burns":
+            "Explain safe immediate first aid for a minor burn, "
+            "what not to apply, and when urgent care is needed.",
+        "Sprains":
+            "Explain general first aid for a possible sprain, "
+            "what to avoid and when to seek medical assessment.",
+        "Nosebleeds":
+            "Explain safe first aid for a nosebleed and "
+            "when emergency medical help is needed.",
+        "Suspected fracture":
+            "Explain safe first aid for a suspected fracture. "
+            "Do not suggest trying to straighten the bone. "
+            "Explain how to avoid further injury and get help.",
+        "Head injury":
+            "Explain warning signs after a head injury and "
+            "when emergency help is required. Do not diagnose."
+    }
+
+    selected_first_aid = st.selectbox(
+        "Choose a first-aid topic",
+        list(first_aid_topics.keys()),
+    )
+
+    if st.button(
+        "Show first-aid guidance",
+        use_container_width=True,
+    ):
+        with st.spinner("Preparing first-aid information..."):
+            result = ask_ai(
+                first_aid_topics[selected_first_aid]
+            )
+
+        st.markdown("### General guidance")
+        st.markdown(result)
+
+        st.caption(
+            "This guide cannot assess the severity of an injury."
+        )
+
+# --------------------------------------------------
+# TAB 5 — TRUSTED RESOURCES
+# --------------------------------------------------
+
+with resources_tab:
+    st.header("📚 Trusted Health Resources")
+
+    st.write(
+        "Use these established medical information websites "
+        "to read more about health conditions."
+    )
 
     st.markdown("### MedlinePlus")
     st.write(
-        "A health-information resource from the US National "
-        "Library of Medicine."
+        "Health information from the US National Library "
+        "of Medicine."
     )
     st.link_button(
         "Explore health topics",
@@ -544,10 +574,9 @@ with learn_tab:
 
     st.divider()
 
-    st.markdown("### World Health Organization")
+    st.markdown("### World Health Organization (WHO)")
     st.write(
-        "Read fact sheets about diseases, prevention and "
-        "public health."
+        "Fact sheets about diseases, public health and prevention."
     )
     st.link_button(
         "Read WHO fact sheets",
@@ -559,7 +588,8 @@ with learn_tab:
 
     st.markdown("### NHS Health A to Z")
     st.write(
-        "Find general information about conditions and symptoms."
+        "Information about common conditions, symptoms "
+        "and health concerns."
     )
     st.link_button(
         "Explore NHS health topics",
@@ -567,18 +597,19 @@ with learn_tab:
         use_container_width=True,
     )
 
-    st.info(
-        "These are external reference links. This app does not "
+    st.warning(
+        "These links open external websites. MediAI does not "
         "automatically retrieve or verify their latest content "
-        "when generating an AI response."
+        "inside its AI answers."
     )
 
-# ------------------------- FOOTER ------------------------
+# --------------------------------------------------
+# Footer
+# --------------------------------------------------
 
 st.divider()
 
 st.caption(
-    "MediAI 3.0 | Created by Yash Raj Singh | "
-    "Educational information only — not a medical diagnosis."
+    "MediAI 2.0 • Created by Yash Raj Singh • "
+    "Educational health information only"
 )
-
